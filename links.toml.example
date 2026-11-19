@@ -14,6 +14,12 @@
 # For anything else, set url instead of port.
 # url          full http or https address
 #
+# For a scheduled job with no web page, add a [[task]] block. Tasks are listed
+# under "Scheduled tasks" and are not clickable. You write the schedule text.
+# name         required
+# schedule     required, for example "Mondays 8am"
+# description  optional short line under the name
+#
 # Remove the leading "# " from these examples and change them to suit.
 
 # [[link]]
@@ -32,3 +38,8 @@
 # name = "Project source"
 # group = "Reference"
 # url = "https://example.com/my-project"
+
+# [[task]]
+# name = "Weekly report"
+# schedule = "Mondays 8am"
+# description = "Emails a summary"

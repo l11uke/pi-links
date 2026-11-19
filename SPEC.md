@@ -1,10 +1,11 @@
 # pi-links specification
 
-Status: draft v1
+Status: draft v2
 
 ## Purpose
 
-Serve one page of links to the web services on a Raspberry Pi.
+Serve one page of links to the web services on a Raspberry Pi, plus a list of
+its scheduled jobs.
 
 ## Scope
 
@@ -15,9 +16,12 @@ Serve one page of links to the web services on a Raspberry Pi.
 - Links are grouped by `group`, in first-seen order.
 - Edits apply on the next page load. An invalid edit leaves the last good list in
   place and shows the problems on the page.
+- Scheduled jobs are listed from `[[task]]` entries, with schedule text written
+  by the owner. They are not clickable.
 - `/healthz` returns `ok`.
 
-Service status checks, logins and browser-based editing are out of scope for v1.
+Service status checks, job run history, logins and browser-based editing are out
+of scope for v2.
 
 ## Runtime
 
@@ -30,6 +34,9 @@ Python 3.11+ standard library, run by systemd with `DynamicUser=yes`.
 
 `links.toml` fields: `name`, `group`, `description`, `port`, `path`, `scheme`,
 `url`. Each link sets exactly one of `port` or `url`.
+
+`[[task]]` fields: `name`, `schedule`, `description`. `name` and `schedule` are
+required.
 
 ## Commands
 

@@ -40,6 +40,16 @@ group = "Reference"
 url = "https://example.com/my-project"
 ```
 
+Jobs with no web page go in the same file and appear under "Scheduled tasks".
+The page shows the schedule you write; it does not read cron or systemd.
+
+```toml
+[[task]]
+name = "Weekly report"
+schedule = "Mondays 8am"
+description = "Emails a summary"
+```
+
 `links.toml.example` documents every field. If an edit has a mistake, the page
 keeps the last working list and shows what to fix.
 

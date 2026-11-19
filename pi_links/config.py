@@ -27,6 +27,7 @@ DEFAULTS = {
 
 MAX_TITLE_LENGTH = 60
 LINK_KEYS = {"name", "group", "description", "port", "path", "scheme", "url"}
+TASK_KEYS = {"name", "schedule", "description"}
 DEFAULT_GROUP = "Services"
 _UNSAFE_URL_CHARS = re.compile(r"[\s\x00-\x1f\x7f]")
 
@@ -56,6 +57,19 @@ class Link:
     path: str = "/"
     scheme: str = "http"
     url: str | None = None
+
+
+@dataclass(frozen=True)
+class Task:
+    name: str
+    schedule: str
+    description: str = ""
+
+
+@dataclass(frozen=True)
+class Board:
+    links: tuple[Link, ...] = ()
+    tasks: tuple[Task, ...] = ()
 
 
 def _parse_env_file(path: Path, problems: list[str]) -> dict[str, str]:
@@ -208,7 +222,29 @@ def _parse_link(entry: object, label: str, problems: list[str]) -> Link | None:
     )
 
 
-def load_links(links_file: str | Path) -> list[Link]:
+def _parse_task(entry: object, label: str, problems: list[str]) -> Task | None:
+    if not isinstance(entry, dict):
+        problems.append(f"{label}: must be a [[task]] table")
+        return None
+
+    start = len(problems)
+    for key in sorted(set(entry) - TASK_KEYS):
+        problems.append(f"{label}: unknown key {key}")
+
+    name = _text(entry, "name", label, problems)
+    if not name:
+        problems.append(f"{label}: name is required")
+    schedule = _text(entry, "schedule", label, problems)
+    if not schedule:
+        problems.append(f"{label}: schedule is required")
+    description = _text(entry, "description", label, problems)
+
+    if len(problems) > start:
+        return None
+    return Task(name=name, schedule=schedule, description=description)
+
+
+def load_board(links_file: str | Path) -> Board:
     path = Path(links_file)
     try:
         with path.open("rb") as handle:
@@ -220,16 +256,32 @@ def load_links(links_file: str | Path) -> list[Link]:
     except (tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
         raise ConfigError([f"{path}: invalid TOML: {exc}"]) from None
 
-    problems = [f"{path}: unknown top-level key {key}" for key in sorted(set(data) - {"link"})]
+    problems = [
+        f"{path}: unknown top-level key {key}" for key in sorted(set(data) - {"link", "task"})
+    ]
     entries = data.get("link", [])
+    task_entries = data.get("task", [])
     if not isinstance(entries, list):
         raise ConfigError(problems + [f"{path}: link must be written as [[link]]"])
+    if not isinstance(task_entries, list):
+        raise ConfigError(problems + [f"{path}: task must be written as [[task]]"])
 
     links = []
     for number, entry in enumerate(entries, start=1):
         link = _parse_link(entry, f"{path}: link {number}", problems)
         if link:
             links.append(link)
+
+    tasks = []
+    for number, entry in enumerate(task_entries, start=1):
+        task = _parse_task(entry, f"{path}: task {number}", problems)
+        if task:
+            tasks.append(task)
+
     if problems:
         raise ConfigError(problems)
-    return links
+    return Board(links=tuple(links), tasks=tuple(tasks))
+
+
+def load_links(links_file: str | Path) -> list[Link]:
+    return list(load_board(links_file).links)

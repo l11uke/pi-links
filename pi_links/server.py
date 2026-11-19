@@ -9,7 +9,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from .config import ConfigError, Link, Settings, load_links
+from .config import Board, ConfigError, Settings, load_board
 from .render import render_page
 
 _HOSTNAME = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")
@@ -55,7 +55,7 @@ class LinkStore:
     def __init__(self, path: Path):
         self.path = path
         self._lock = threading.Lock()
-        self._links = load_links(path)
+        self._board = load_board(path)
         self._problems: list[str] = []
         self._stamp = self._current_stamp()
 
@@ -66,17 +66,17 @@ class LinkStore:
             return None
         return (stat.st_mtime_ns, stat.st_size)
 
-    def get(self) -> tuple[list[Link], list[str]]:
+    def get(self) -> tuple[Board, list[str]]:
         with self._lock:
             stamp = self._current_stamp()
             if stamp != self._stamp:
                 self._stamp = stamp
                 try:
-                    self._links = load_links(self.path)
+                    self._board = load_board(self.path)
                     self._problems = []
                 except ConfigError as exc:
                     self._problems = exc.problems
-            return list(self._links), list(self._problems)
+            return self._board, list(self._problems)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -105,13 +105,14 @@ class Handler(BaseHTTPRequestHandler):
 
         local_ip = self.connection.getsockname()[0]
         host = host_from_header(self.headers.get("Host"), _format_ip(local_ip) or local_ip)
-        links, problems = self.server.store.get()
+        board, problems = self.server.store.get()
         page = render_page(
             self.server.settings.title,
             host,
-            links,
+            list(board.links),
             str(self.server.store.path),
             problems,
+            board.tasks,
         )
         self._send(200, "text/html; charset=utf-8", page.encode("utf-8"))
 

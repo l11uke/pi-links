@@ -6,7 +6,7 @@ from __future__ import annotations
 from html import escape
 from urllib.parse import urlsplit
 
-from .config import Link
+from .config import Link, Task
 
 STYLE = """
 :root {
@@ -79,6 +79,24 @@ a {
 a:hover { background: var(--board-light); }
 a:hover .pad, a:focus-visible .pad { background: var(--solder); }
 a:focus-visible { outline: 3px solid var(--silkscreen); outline-offset: -3px; }
+.tasks { grid-column: 1 / -1; }
+.tasks ul {
+  column-gap: clamp(1.5rem, 3vw, 2.5rem);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+}
+.tasks li::before { display: none; }
+.task {
+  align-items: center;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1.375rem minmax(0, 1fr) minmax(0, auto);
+  min-height: 3.75rem;
+  padding: .625rem .75rem .625rem .9rem;
+}
+.marker { border: 2px solid var(--silkscreen); height: .875rem; justify-self: center; width: .875rem; }
+.schedule { font-size: 1.0625rem; line-height: 1.2; max-width: 11rem; text-align: right; }
+@media (max-width: 30rem) { .schedule { max-width: 6.5rem; } }
 .notice {
   border: 2px solid var(--warning);
   border-radius: 4px;
@@ -128,12 +146,26 @@ def _render_link(link: Link, host: str) -> str:
     )
 
 
+def _render_task(task: Task) -> str:
+    description = (
+        f'<span class="description">{escape(task.description)}</span>'
+        if task.description
+        else ""
+    )
+    return (
+        '<li><div class="task"><span class="marker" aria-hidden="true"></span>'
+        f'<span><span class="name">{escape(task.name)}</span>{description}</span>'
+        f'<span class="schedule">{escape(task.schedule)}</span></div></li>'
+    )
+
+
 def render_page(
     title: str,
     host: str,
     links: list[Link],
     links_file: str,
     problems: list[str] | None = None,
+    tasks: list[Task] | tuple[Task, ...] = (),
 ) -> str:
     groups: dict[str, list[Link]] = {}
     for link in links:
@@ -145,6 +177,13 @@ def render_page(
         + "</ul></section>"
         for group, members in groups.items()
     )
+
+    if tasks:
+        sections += (
+            '<section class="tasks"><h2>Scheduled tasks</h2><ul>'
+            + "".join(_render_task(task) for task in tasks)
+            + "</ul></section>"
+        )
 
     notice = ""
     if problems:

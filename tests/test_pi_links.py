@@ -17,6 +17,8 @@ from pi_links.config import (  # noqa: E402
     ConfigError,
     Link,
     Settings,
+    Task,
+    load_board,
     load_links,
     load_settings,
 )
@@ -196,6 +198,46 @@ def test_empty_links_show_next_step(tmp_path):
     assert "No links yet" in page and "/etc/example/links.toml" in page
 
 
+def test_tasks_parse_in_order(tmp_path):
+    path = write(
+        tmp_path / "l.toml",
+        '[[task]]\nname = "B"\nschedule = "Daily"\n\n'
+        '[[task]]\nname = "A"\nschedule = "Weekly"\ndescription = "Email"\n',
+    )
+    board = load_board(path)
+    assert [task.name for task in board.tasks] == ["B", "A"]
+    assert board.links == ()
+
+
+@pytest.mark.parametrize(
+    "body, expected",
+    [
+        ('schedule = "Daily"', "name is required"),
+        ('name = "A"', "schedule is required"),
+        ('name = "A"\nschedule = 5', "schedule must be text"),
+        ('name = "A"\nschedule = "Daily"\nport = 80', "unknown key port"),
+    ],
+)
+def test_invalid_tasks_are_rejected(tmp_path, body, expected):
+    assert expected in problems_for(write(tmp_path / "l.toml", f"[[task]]\n{body}\n"))
+
+
+def test_tasks_render_escaped_and_without_links():
+    page = render_page("T", "h", [], "/f", tasks=[Task("<n>", "<s>", "<d>")])
+    assert "Scheduled tasks" in page
+    assert "No links yet" not in page
+    assert "<a " not in page
+    for raw in ("<n>", "<s>", "<d>"):
+        assert raw not in page
+
+
+def test_server_shows_tasks_after_edit(running):
+    server, links = running
+    write(links, '[[task]]\nname = "Nightly job"\nschedule = "Daily 2am"\n')
+    body = request(server)[1]
+    assert "Nightly job" in body and "Daily 2am" in body
+
+
 def test_settings_example_matches_code():
     text = (ROOT / "settings.env.example").read_text()
     assert set(re.findall(r"^(PI_LINKS_[A-Z_]+)=", text, re.M)) == set(DEFAULTS)
@@ -207,9 +249,11 @@ def test_links_example_is_empty_and_its_samples_are_valid(tmp_path):
     example = ROOT / "links.toml.example"
     assert load_links(example) == []
     sample = re.sub(
-        r"^# (\[\[link\]\]|[a-z]+ = .*)$", r"\1", example.read_text(), flags=re.M
+        r"^# (\[\[(?:link|task)\]\]|[a-z]+ = .*)$", r"\1", example.read_text(), flags=re.M
     )
-    assert len(load_links(write(tmp_path / "l.toml", sample))) == 3
+    board = load_board(write(tmp_path / "l.toml", sample))
+    assert len(board.links) == 3
+    assert len(board.tasks) == 1
 
 
 def test_no_site_values_in_tracked_text():

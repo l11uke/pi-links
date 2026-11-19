@@ -7,7 +7,7 @@ import signal
 import sys
 
 from . import __version__
-from .config import DEFAULT_SETTINGS_FILE, ConfigError, load_links, load_settings
+from .config import DEFAULT_SETTINGS_FILE, ConfigError, load_board, load_settings
 from .server import LinkStore, LinksServer
 
 
@@ -41,16 +41,19 @@ def serve(settings_file: str) -> int:
 
 def check_config(settings_file: str) -> int:
     settings = load_settings(settings_file)
-    links = load_links(settings.links_file)
+    board = load_board(settings.links_file)
     print("Configuration is valid.")
     print(f"PI_LINKS_BIND={settings.bind}")
     print(f"PI_LINKS_PORT={settings.port}")
     print(f"PI_LINKS_TITLE={settings.title}")
     print(f"PI_LINKS_LINKS_FILE={settings.links_file}")
-    print(f"Links: {len(links)}")
-    for link in links:
+    print(f"Links: {len(board.links)}")
+    for link in board.links:
         target = link.url or f"port {link.port}{link.path}"
         print(f"  {link.group}: {link.name} ({target})")
+    print(f"Scheduled tasks: {len(board.tasks)}")
+    for task in board.tasks:
+        print(f"  {task.name} ({task.schedule})")
     return 0
 
 
