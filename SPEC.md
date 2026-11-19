@@ -13,7 +13,7 @@ automatically, with owner changes on top.
   `PI_LINKS_SCAN_SCHEDULE`, and once by the installer.
 - Web services: each TCP listener reachable from other devices (bound to a
   wildcard or a non-loopback address) is requested over HTTP, then HTTPS with
-  certificate checks off. A response with HTML or a title counts. Ports 22, 53,
+  certificate checks off. A response with HTML, a title, or a redirect counts. Ports 22, 53,
   111, the page's own port and well-known non-web daemons are skipped.
 - Names come from a built-in list of common apps, then the page title (generic
   titles such as "Unauthorized" ignored), then the Docker container, then the

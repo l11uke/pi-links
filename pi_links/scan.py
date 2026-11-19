@@ -49,6 +49,7 @@ HINTS = [
     ("jellyfin", "Jellyfin", "Media", "/"),
     ("emby", "Emby", "Media", "/"),
     ("stremio", "Stremio", "Media", "/"),
+    ("strem.io", "Stremio", "Media", "/"),
     ("pi-hole", "Pi-hole", "Network", "/admin/"),
     ("pihole", "Pi-hole", "Network", "/admin/"),
     ("adguard", "AdGuard Home", "Network", "/"),
@@ -142,7 +143,11 @@ class _NoRedirectToOtherHosts(urllib.request.HTTPRedirectHandler):
 
 
 def probe_http(host: str, port: int) -> dict | None:
-    """Return scheme, status and title if the port answers HTTP or HTTPS."""
+    """Return scheme, status, title and any redirect if the port answers HTTP or HTTPS.
+
+    A redirect to another host counts: some apps, such as Stremio's server,
+    send the browser to a hosted web app.
+    """
     for scheme in ("http", "https"):
         handlers = [_NoRedirectToOtherHosts()]
         if scheme == "https":
@@ -165,11 +170,13 @@ def probe_http(host: str, port: int) -> dict | None:
         text = body.decode("utf-8", "replace")
         title = re.search(r"<title[^>]*>([^<]*)", text, re.I)
         content_type = (headers.get("Content-Type") or "").lower()
-        if title or "html" in content_type:
+        location = (headers.get("Location") or "") if 300 <= status < 400 else ""
+        if title or "html" in content_type or location:
             return {
                 "scheme": scheme,
                 "status": status,
                 "title": re.sub(r"\s+", " ", title.group(1)).strip() if title else "",
+                "location": location,
             }
     return None
 
@@ -206,11 +213,14 @@ def discover_links(runner: Runner, prober: Prober, own_port: int) -> list[dict]:
             continue
         container = containers.get(port, "")
         process = ", ".join(sorted(p for p in listener.processes if p != "docker-proxy"))
-        hint = _hint(result["title"], container, process)
+        location = result.get("location", "")
+        hint = _hint(result["title"], container, process, location)
         if hint:
             name, group, path = hint
         else:
-            name = _clean_title(result["title"]) or container or process or f"Port {port}"
+            redirect_host = urllib.request.urlparse(location).hostname or "" if location else ""
+            name = (_clean_title(result["title"]) or container or process
+                    or redirect_host or f"Port {port}")
             group, path = "Services", "/"
         found.append({
             "port": port,

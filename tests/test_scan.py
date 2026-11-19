@@ -249,12 +249,49 @@ class _Page(BaseHTTPRequestHandler):
         pass
 
 
+class _Redirect(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(307)
+        self.send_header("Location", "https://app.example.net/shell/?server=x")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+def test_probe_http_counts_redirect_to_another_host():
+    server = HTTPServer(("127.0.0.1", 0), _Redirect)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        result = probe_http("127.0.0.1", server.server_address[1])
+    finally:
+        server.shutdown()
+    assert result["status"] == 307
+    assert result["location"].startswith("https://app.example.net/")
+
+
+def test_redirecting_service_is_named_from_hint_or_redirect_host():
+    ss = (
+        'LISTEN 0 4096 0.0.0.0:11470 0.0.0.0:* users:(("docker-proxy",pid=1,fd=8))\n'
+        'LISTEN 0 4096 0.0.0.0:7000 0.0.0.0:* users:(("docker-proxy",pid=2,fd=8))\n'
+    )
+    pages = {
+        11470: {"scheme": "http", "status": 307, "title": "", "location": "https://app.strem.io/shell/"},
+        7000: {"scheme": "http", "status": 302, "title": "", "location": "https://cloud.example.net/x"},
+    }
+    runner = fake_runner({"ss": (0, ss), "docker ps": (127, "")})
+    links = {l["port"]: l for l in discover_links(runner, lambda h, p: pages[p], own_port=80)}
+    assert links[11470]["name"] == "Stremio" and links[11470]["group"] == "Media"
+    assert links[7000]["name"] == "cloud.example.net"
+
+
 def test_probe_http_real_server_and_non_http_port():
     server = HTTPServer(("127.0.0.1", 0), _Page)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         result = probe_http("127.0.0.1", server.server_address[1])
-        assert result == {"scheme": "http", "status": 200, "title": "My App"}
+        assert result == {"scheme": "http", "status": 200, "title": "My App", "location": ""}
     finally:
         server.shutdown()
 

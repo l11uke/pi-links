@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — 0.5.1
+
+- The scan now counts a port that redirects to another site as a web service,
+  for apps such as Stremio whose server sends the browser to a hosted web app.
+
 ## 2026-11-19 — 0.5.0
 
 - Added a scan that finds web services, systemd timers and cron jobs on its own,
