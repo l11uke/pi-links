@@ -88,18 +88,20 @@ a:focus-visible { outline: 3px solid var(--silkscreen); outline-offset: -3px; }
   padding: .5rem .25rem .25rem;
 }
 .task-group { border-left: 3px solid var(--solder); padding-left: .25rem; }
-h3 { color: var(--solder); font-size: 1.125rem; font-weight: 600; margin: 0; padding: .25rem 0 0 .65rem; }
+h3 { color: var(--solder); font-size: 1rem; font-weight: 600; margin: 0; padding: .25rem 0 0 .65rem; }
 .tasks li::before { display: none; }
 .task {
   align-items: center;
   display: grid;
   gap: 1rem;
   grid-template-columns: 1.375rem minmax(0, 1fr) minmax(0, auto);
-  min-height: 3.75rem;
-  padding: .625rem .75rem .625rem .9rem;
+  min-height: 2.75rem;
+  padding: .375rem .75rem .375rem .9rem;
 }
-.marker { border: 2px solid var(--silkscreen); height: .875rem; justify-self: center; width: .875rem; }
-.schedule { font-size: 1.0625rem; line-height: 1.2; max-width: 11rem; text-align: right; }
+.tasks .name { font-size: 1.0625rem; }
+.tasks .description { font-size: .875rem; }
+.marker { border: 2px solid var(--silkscreen); height: .75rem; justify-self: center; width: .75rem; }
+.schedule { font-size: .9375rem; line-height: 1.2; max-width: 11rem; text-align: right; }
 @media (max-width: 30rem) { .schedule { max-width: 6.5rem; } }
 .notice {
   border: 2px solid var(--warning);
