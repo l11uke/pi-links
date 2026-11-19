@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — 0.3.0
+
+- Added a `group` field to `[[task]]`. Scheduled tasks are shown under a heading
+  for each project.
+
 ## 2026-11-19 — 0.2.0
 
 - Added `[[task]]` entries and a "Scheduled tasks" section for jobs with no web page.

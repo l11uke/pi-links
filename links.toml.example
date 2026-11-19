@@ -17,6 +17,7 @@
 # For a scheduled job with no web page, add a [[task]] block. Tasks are listed
 # under "Scheduled tasks" and are not clickable. You write the schedule text.
 # name         required
+# group        optional project heading, default "Other"
 # schedule     required, for example "Mondays 8am"
 # description  optional short line under the name
 #
@@ -41,5 +42,6 @@
 
 # [[task]]
 # name = "Weekly report"
+# group = "Network monitor"
 # schedule = "Mondays 8am"
 # description = "Emails a summary"

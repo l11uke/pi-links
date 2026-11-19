@@ -206,7 +206,16 @@ def test_tasks_parse_in_order(tmp_path):
     )
     board = load_board(path)
     assert [task.name for task in board.tasks] == ["B", "A"]
+    assert board.tasks[0].group == "Other"
     assert board.links == ()
+
+
+def test_tasks_render_under_project_headings_in_first_seen_order():
+    tasks = [Task("A", "Daily", group="Two"), Task("B", "Daily", group="One"), Task("C", "Daily", group="Two")]
+    page = render_page("T", "h", [], "/f", tasks=tasks)
+    assert page.count('class="task-group"') == 2
+    assert page.index("<h3>Two</h3>") < page.index("<h3>One</h3>")
+    assert page.index(">A<") < page.index(">C<") < page.index(">B<")
 
 
 @pytest.mark.parametrize(
@@ -223,11 +232,11 @@ def test_invalid_tasks_are_rejected(tmp_path, body, expected):
 
 
 def test_tasks_render_escaped_and_without_links():
-    page = render_page("T", "h", [], "/f", tasks=[Task("<n>", "<s>", "<d>")])
+    page = render_page("T", "h", [], "/f", tasks=[Task("<n>", "<s>", "<d>", "<g>")])
     assert "Scheduled tasks" in page
     assert "No links yet" not in page
     assert "<a " not in page
-    for raw in ("<n>", "<s>", "<d>"):
+    for raw in ("<n>", "<s>", "<d>", "<g>"):
         assert raw not in page
 
 

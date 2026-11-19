@@ -27,7 +27,8 @@ DEFAULTS = {
 
 MAX_TITLE_LENGTH = 60
 LINK_KEYS = {"name", "group", "description", "port", "path", "scheme", "url"}
-TASK_KEYS = {"name", "schedule", "description"}
+TASK_KEYS = {"name", "group", "schedule", "description"}
+DEFAULT_TASK_GROUP = "Other"
 DEFAULT_GROUP = "Services"
 _UNSAFE_URL_CHARS = re.compile(r"[\s\x00-\x1f\x7f]")
 
@@ -64,6 +65,7 @@ class Task:
     name: str
     schedule: str
     description: str = ""
+    group: str = DEFAULT_TASK_GROUP
 
 
 @dataclass(frozen=True)
@@ -238,10 +240,11 @@ def _parse_task(entry: object, label: str, problems: list[str]) -> Task | None:
     if not schedule:
         problems.append(f"{label}: schedule is required")
     description = _text(entry, "description", label, problems)
+    group = _text(entry, "group", label, problems) or DEFAULT_TASK_GROUP
 
     if len(problems) > start:
         return None
-    return Task(name=name, schedule=schedule, description=description)
+    return Task(name=name, schedule=schedule, description=description, group=group)
 
 
 def load_board(links_file: str | Path) -> Board:

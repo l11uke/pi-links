@@ -40,12 +40,14 @@ group = "Reference"
 url = "https://example.com/my-project"
 ```
 
-Jobs with no web page go in the same file and appear under "Scheduled tasks".
+Jobs with no web page go in the same file and appear under "Scheduled tasks",
+grouped by project.
 The page shows the schedule you write; it does not read cron or systemd.
 
 ```toml
 [[task]]
 name = "Weekly report"
+group = "Network monitor"
 schedule = "Mondays 8am"
 description = "Emails a summary"
 ```

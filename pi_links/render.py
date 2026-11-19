@@ -80,11 +80,15 @@ a:hover { background: var(--board-light); }
 a:hover .pad, a:focus-visible .pad { background: var(--solder); }
 a:focus-visible { outline: 3px solid var(--silkscreen); outline-offset: -3px; }
 .tasks { grid-column: 1 / -1; }
-.tasks ul {
-  column-gap: clamp(1.5rem, 3vw, 2.5rem);
+.task-groups {
+  align-items: start;
   display: grid;
+  gap: 1.25rem clamp(1.5rem, 3vw, 2.5rem);
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  padding: .5rem .25rem .25rem;
 }
+.task-group { border-left: 3px solid var(--solder); padding-left: .25rem; }
+h3 { color: var(--solder); font-size: 1.125rem; font-weight: 600; margin: 0; padding: .25rem 0 0 .65rem; }
 .tasks li::before { display: none; }
 .task {
   align-items: center;
@@ -179,10 +183,18 @@ def render_page(
     )
 
     if tasks:
+        task_groups: dict[str, list[Task]] = {}
+        for task in tasks:
+            task_groups.setdefault(task.group, []).append(task)
         sections += (
-            '<section class="tasks"><h2>Scheduled tasks</h2><ul>'
-            + "".join(_render_task(task) for task in tasks)
-            + "</ul></section>"
+            '<section class="tasks"><h2>Scheduled tasks</h2><div class="task-groups">'
+            + "".join(
+                f'<div class="task-group"><h3>{escape(group)}</h3><ul>'
+                + "".join(_render_task(task) for task in members)
+                + "</ul></div>"
+                for group, members in task_groups.items()
+            )
+            + "</div></section>"
         )
 
     notice = ""

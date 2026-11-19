@@ -53,7 +53,7 @@ def check_config(settings_file: str) -> int:
         print(f"  {link.group}: {link.name} ({target})")
     print(f"Scheduled tasks: {len(board.tasks)}")
     for task in board.tasks:
-        print(f"  {task.name} ({task.schedule})")
+        print(f"  {task.group}: {task.name} ({task.schedule})")
     return 0
 
 

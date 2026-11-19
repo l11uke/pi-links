@@ -1,6 +1,6 @@
 # pi-links specification
 
-Status: draft v2
+Status: draft v3
 
 ## Purpose
 
@@ -17,7 +17,7 @@ its scheduled jobs.
 - Edits apply on the next page load. An invalid edit leaves the last good list in
   place and shows the problems on the page.
 - Scheduled jobs are listed from `[[task]]` entries, with schedule text written
-  by the owner. They are not clickable.
+  by the owner, grouped by `group` in first-seen order. They are not clickable.
 - `/healthz` returns `ok`.
 
 Service status checks, job run history, logins and browser-based editing are out
@@ -35,7 +35,7 @@ Python 3.11+ standard library, run by systemd with `DynamicUser=yes`.
 `links.toml` fields: `name`, `group`, `description`, `port`, `path`, `scheme`,
 `url`. Each link sets exactly one of `port` or `url`.
 
-`[[task]]` fields: `name`, `schedule`, `description`. `name` and `schedule` are
+`[[task]]` fields: `name`, `group`, `schedule`, `description`. `name` and `schedule` are
 required.
 
 ## Commands
