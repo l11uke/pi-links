@@ -20,6 +20,13 @@
 # group        optional project heading, default "Other"
 # schedule     required, for example "Mondays 8am"
 # description  optional short line under the name
+# status_file  optional absolute path to a result file the job writes after
+#              each run; the page shows when it last passed
+# status_max_age_hours  optional, default 192 (8 days); an older pass shows
+#              as overdue
+#
+# Result file format (JSON):
+#   {"checked_at": "2026-01-04T18:00:00+10:00", "ok": true, "summary": "3 of 3 OK"}
 #
 # Remove the leading "# " from these examples and change them to suit.
 
@@ -45,3 +52,4 @@
 # group = "Network monitor"
 # schedule = "Mondays 8am"
 # description = "Emails a summary"
+# status_file = "/var/lib/my-report/status.json"

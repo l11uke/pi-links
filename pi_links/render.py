@@ -7,6 +7,7 @@ from html import escape
 from urllib.parse import urlsplit
 
 from .config import Link, Task
+from .status import format_time, read_status
 
 STYLE = """
 :root {
@@ -16,6 +17,7 @@ STYLE = """
   --muted: #b4d0c1;
   --solder: #e8c267;
   --warning: #ffd9c7;
+  --pass: #9fe0b4;
   --font: Bahnschrift, "DIN Alternate", "Roboto Condensed", "Arial Narrow",
     sans-serif-condensed, sans-serif;
 }
@@ -103,6 +105,11 @@ h3 { color: var(--solder); font-size: 1rem; font-weight: 600; margin: 0; padding
 .marker { border: 2px solid var(--silkscreen); height: .75rem; justify-self: center; width: .75rem; }
 .schedule { font-size: .9375rem; line-height: 1.2; max-width: 11rem; text-align: right; }
 @media (max-width: 30rem) { .schedule { max-width: 6.5rem; } }
+.status { display: block; font-size: .875rem; line-height: 1.3; margin-top: .125rem; }
+.status-passed { color: var(--pass); }
+.status-attention { color: var(--warning); font-weight: 600; }
+.marker-passed { background: var(--pass); border-color: var(--pass); }
+.marker-attention { background: var(--warning); border-color: var(--warning); }
 .notice {
   border: 2px solid var(--warning);
   border-radius: 4px;
@@ -152,15 +159,35 @@ def _render_link(link: Link, host: str) -> str:
     )
 
 
+def _status_line(task: Task) -> tuple[str, str]:
+    """Return the marker modifier and the status line for a task."""
+    if not task.status_file:
+        return "", ""
+    status = read_status(task.status_file, task.status_max_age_hours)
+    detail = f": {status.summary}" if status.summary else ""
+    if status.state == "passed":
+        text, kind = f"Passed {format_time(status.checked_at)}{detail}", "passed"
+    elif status.state == "failed":
+        text, kind = f"Failed {format_time(status.checked_at)}{detail}", "attention"
+    elif status.state == "overdue":
+        text, kind = f"Overdue, last passed {format_time(status.checked_at)}", "attention"
+    elif status.state == "never":
+        text, kind = "No result yet", "attention"
+    else:
+        text, kind = "Result file unreadable", "attention"
+    return f" marker-{kind}", f'<span class="status status-{kind}">{escape(text)}</span>'
+
+
 def _render_task(task: Task) -> str:
     description = (
         f'<span class="description">{escape(task.description)}</span>'
         if task.description
         else ""
     )
+    marker, status = _status_line(task)
     return (
-        '<li><div class="task"><span class="marker" aria-hidden="true"></span>'
-        f'<span><span class="name">{escape(task.name)}</span>{description}</span>'
+        f'<li><div class="task"><span class="marker{marker}" aria-hidden="true"></span>'
+        f'<span><span class="name">{escape(task.name)}</span>{description}{status}</span>'
         f'<span class="schedule">{escape(task.schedule)}</span></div></li>'
     )
 

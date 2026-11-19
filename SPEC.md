@@ -1,6 +1,6 @@
 # pi-links specification
 
-Status: draft v3
+Status: draft v4
 
 ## Purpose
 
@@ -18,9 +18,13 @@ its scheduled jobs.
   place and shows the problems on the page.
 - Scheduled jobs are listed from `[[task]]` entries, with schedule text written
   by the owner, grouped by `group` in first-seen order. They are not clickable.
+- A task with `status_file` shows its latest result: passed, failed, overdue
+  (older than `status_max_age_hours`), no result yet, or unreadable. The file is
+  JSON with `checked_at` (ISO 8601 with offset), `ok` (boolean) and optional
+  `summary`, and is read on each page load.
 - `/healthz` returns `ok`.
 
-Service status checks, job run history, logins and browser-based editing are out
+Service status checks, job run history beyond the latest result, logins and browser-based editing are out
 of scope for v2.
 
 ## Runtime
@@ -35,7 +39,8 @@ Python 3.11+ standard library, run by systemd with `DynamicUser=yes`.
 `links.toml` fields: `name`, `group`, `description`, `port`, `path`, `scheme`,
 `url`. Each link sets exactly one of `port` or `url`.
 
-`[[task]]` fields: `name`, `group`, `schedule`, `description`. `name` and `schedule` are
+`[[task]]` fields: `name`, `group`, `schedule`, `description`, `status_file`,
+`status_max_age_hours`. `name` and `schedule` are
 required.
 
 ## Commands

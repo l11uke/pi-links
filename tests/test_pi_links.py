@@ -24,6 +24,7 @@ from pi_links.config import (  # noqa: E402
 )
 from pi_links.render import link_href, link_target, render_page  # noqa: E402
 from pi_links.server import LinksServer, LinkStore, host_from_header  # noqa: E402
+from pi_links.status import format_time, read_status  # noqa: E402
 
 
 def write(path, text):
@@ -247,6 +248,68 @@ def test_server_shows_tasks_after_edit(running):
     assert "Nightly job" in body and "Daily 2am" in body
 
 
+NOW = __import__("datetime").datetime.fromisoformat("2026-01-10T12:00:00+10:00")
+
+
+def status_file(tmp_path, body):
+    return str(write(tmp_path / "status.json", body))
+
+
+@pytest.mark.parametrize(
+    "body, state",
+    [
+        ('{"checked_at": "2026-01-10T09:00:00+10:00", "ok": true, "summary": "7 of 7"}', "passed"),
+        ('{"checked_at": "2026-01-10T09:00:00+10:00", "ok": false, "summary": "1 failed"}', "failed"),
+        ('{"checked_at": "2026-01-01T09:00:00+10:00", "ok": true}', "overdue"),
+        ('{"checked_at": "2026-01-10T09:00:00", "ok": true}', "unreadable"),
+        ('{"checked_at": "2026-01-10T09:00:00+10:00", "ok": "yes"}', "unreadable"),
+        ('{"ok": true}', "unreadable"),
+        ("not json", "unreadable"),
+    ],
+)
+def test_status_states(tmp_path, body, state):
+    assert read_status(status_file(tmp_path, body), 192, now=NOW).state == state
+
+
+def test_missing_status_file_is_never(tmp_path):
+    assert read_status(tmp_path / "none.json", 192, now=NOW).state == "never"
+
+
+def test_failed_result_stays_failed_when_old(tmp_path):
+    path = status_file(tmp_path, '{"checked_at": "2025-01-01T09:00:00+10:00", "ok": false}')
+    assert read_status(path, 1, now=NOW).state == "failed"
+
+
+def test_format_time():
+    moment = __import__("datetime").datetime.fromisoformat("2026-01-04T18:00:00+00:00")
+    assert format_time(moment.astimezone()) == format_time(moment)
+    assert "Jan" in format_time(moment)
+
+
+@pytest.mark.parametrize(
+    "body, expected",
+    [
+        ('status_file = "relative.json"', "status_file must be an absolute path"),
+        ('status_file = "/x.json"\nstatus_max_age_hours = 0', "whole number of hours"),
+        ("status_max_age_hours = 24", "needs status_file"),
+    ],
+)
+def test_invalid_status_keys(tmp_path, body, expected):
+    text = f'[[task]]\nname = "A"\nschedule = "Daily"\n{body}\n'
+    assert expected in problems_for(write(tmp_path / "l.toml", text))
+
+
+def test_task_status_renders_and_escapes(tmp_path):
+    ok = status_file(tmp_path, '{"checked_at": "2099-01-01T09:00:00+10:00", "ok": true, "summary": "<all> good"}')
+    page = render_page("T", "h", [], "/f", tasks=[Task("A", "Daily", status_file=ok)])
+    assert "Passed" in page and "marker-passed" in page
+    assert "<all>" not in page and "&lt;all&gt; good" in page
+    page = render_page("T", "h", [], "/f", tasks=[Task("B", "Daily", status_file=str(tmp_path / "x.json"))])
+    assert "No result yet" in page and "marker-attention" in page
+    page = render_page("T", "h", [], "/f", tasks=[Task("C", "Daily")])
+    assert "status" not in page.split("<body>")[1]
+
+
 def test_settings_example_matches_code():
     text = (ROOT / "settings.env.example").read_text()
     assert set(re.findall(r"^(PI_LINKS_[A-Z_]+)=", text, re.M)) == set(DEFAULTS)
@@ -258,11 +321,12 @@ def test_links_example_is_empty_and_its_samples_are_valid(tmp_path):
     example = ROOT / "links.toml.example"
     assert load_links(example) == []
     sample = re.sub(
-        r"^# (\[\[(?:link|task)\]\]|[a-z]+ = .*)$", r"\1", example.read_text(), flags=re.M
+        r"^# (\[\[(?:link|task)\]\]|[a-z_]+ = .*)$", r"\1", example.read_text(), flags=re.M
     )
     board = load_board(write(tmp_path / "l.toml", sample))
     assert len(board.links) == 3
     assert len(board.tasks) == 1
+    assert board.tasks[0].status_file
 
 
 def test_no_site_values_in_tracked_text():

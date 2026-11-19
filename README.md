@@ -52,6 +52,17 @@ schedule = "Mondays 8am"
 description = "Emails a summary"
 ```
 
+A task can show when it last passed. Have the job write a small JSON file after
+each run and point `status_file` at it:
+
+```json
+{"checked_at": "2026-01-04T18:00:00+10:00", "ok": true, "summary": "3 of 3 OK"}
+```
+
+The page shows "Passed", "Failed", "Overdue" (no pass within
+`status_max_age_hours`, default 192) or "No result yet". The file must be
+readable by any user, because the service runs with no fixed account.
+
 `links.toml.example` documents every field. If an edit has a mistake, the page
 keeps the last working list and shows what to fix.
 

@@ -27,7 +27,8 @@ DEFAULTS = {
 
 MAX_TITLE_LENGTH = 60
 LINK_KEYS = {"name", "group", "description", "port", "path", "scheme", "url"}
-TASK_KEYS = {"name", "group", "schedule", "description"}
+TASK_KEYS = {"name", "group", "schedule", "description", "status_file", "status_max_age_hours"}
+DEFAULT_STATUS_MAX_AGE_HOURS = 192
 DEFAULT_TASK_GROUP = "Other"
 DEFAULT_GROUP = "Services"
 _UNSAFE_URL_CHARS = re.compile(r"[\s\x00-\x1f\x7f]")
@@ -66,6 +67,8 @@ class Task:
     schedule: str
     description: str = ""
     group: str = DEFAULT_TASK_GROUP
+    status_file: str | None = None
+    status_max_age_hours: int = DEFAULT_STATUS_MAX_AGE_HOURS
 
 
 @dataclass(frozen=True)
@@ -242,9 +245,27 @@ def _parse_task(entry: object, label: str, problems: list[str]) -> Task | None:
     description = _text(entry, "description", label, problems)
     group = _text(entry, "group", label, problems) or DEFAULT_TASK_GROUP
 
+    status_file = entry.get("status_file")
+    if status_file is not None and (
+        not isinstance(status_file, str) or not Path(status_file).is_absolute()
+    ):
+        problems.append(f"{label}: status_file must be an absolute path")
+    max_age = entry.get("status_max_age_hours", DEFAULT_STATUS_MAX_AGE_HOURS)
+    if not isinstance(max_age, int) or isinstance(max_age, bool) or max_age < 1:
+        problems.append(f"{label}: status_max_age_hours must be a whole number of hours")
+    elif "status_max_age_hours" in entry and status_file is None:
+        problems.append(f"{label}: status_max_age_hours needs status_file")
+
     if len(problems) > start:
         return None
-    return Task(name=name, schedule=schedule, description=description, group=group)
+    return Task(
+        name=name,
+        schedule=schedule,
+        description=description,
+        group=group,
+        status_file=status_file,
+        status_max_age_hours=max_age,
+    )
 
 
 def load_board(links_file: str | Path) -> Board:

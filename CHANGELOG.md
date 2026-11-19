@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-19 — 0.4.0
+
+- Added `status_file` and `status_max_age_hours` to `[[task]]`. A task shows when
+  it last passed, or that it failed, is overdue or has no result yet.
+
 ## 2026-11-19 — 0.3.1
 
 - Smaller text and spacing in the Scheduled tasks section.
