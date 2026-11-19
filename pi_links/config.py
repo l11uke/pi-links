@@ -1,8 +1,8 @@
 """The only module that reads configuration.
 
 Settings come from code defaults, then settings.env, then the process
-environment. Links come from a TOML file. Every problem found is reported at
-once, naming the key and the file it belongs in.
+environment. Links and task overrides come from a TOML file. Every problem found
+is reported at once, naming the key and the file it belongs in.
 """
 
 from __future__ import annotations
@@ -23,11 +23,22 @@ DEFAULTS = {
     "PI_LINKS_PORT": "8090",
     "PI_LINKS_TITLE": "Raspberry Pi",
     "PI_LINKS_LINKS_FILE": "/etc/pi-links/links.toml",
+    "PI_LINKS_DISCOVERY_FILE": "/var/lib/pi-links/discovered.json",
+    "PI_LINKS_SCAN_SCHEDULE": "weekly",
 }
 
 MAX_TITLE_LENGTH = 60
-LINK_KEYS = {"name", "group", "description", "port", "path", "scheme", "url"}
-TASK_KEYS = {"name", "group", "schedule", "description", "status_file", "status_max_age_hours"}
+LINK_KEYS = {"name", "group", "description", "port", "path", "scheme", "url", "hide"}
+TASK_KEYS = {
+    "match",
+    "hide",
+    "name",
+    "group",
+    "schedule",
+    "description",
+    "status_file",
+    "status_max_age_hours",
+}
 DEFAULT_STATUS_MAX_AGE_HOURS = 192
 DEFAULT_TASK_GROUP = "Other"
 DEFAULT_GROUP = "Services"
@@ -48,6 +59,8 @@ class Settings:
     port: int
     title: str
     links_file: Path
+    discovery_file: Path = Path(DEFAULTS["PI_LINKS_DISCOVERY_FILE"])
+    scan_schedule: str = DEFAULTS["PI_LINKS_SCAN_SCHEDULE"]
 
 
 @dataclass(frozen=True)
@@ -59,6 +72,8 @@ class Link:
     path: str = "/"
     scheme: str = "http"
     url: str | None = None
+    hide: bool = False
+    fields: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -69,6 +84,9 @@ class Task:
     group: str = DEFAULT_TASK_GROUP
     status_file: str | None = None
     status_max_age_hours: int = DEFAULT_STATUS_MAX_AGE_HOURS
+    match: str | None = None
+    hide: bool = False
+    fields: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -141,13 +159,35 @@ def load_settings(
             f"PI_LINKS_TITLE in {path}: must be 1 to {MAX_TITLE_LENGTH} characters"
         )
 
-    links_file = merged["PI_LINKS_LINKS_FILE"]
-    if not Path(links_file).is_absolute():
-        problems.append(f"PI_LINKS_LINKS_FILE in {path}: must be an absolute path")
+    for key in ("PI_LINKS_LINKS_FILE", "PI_LINKS_DISCOVERY_FILE"):
+        if not Path(merged[key]).is_absolute():
+            problems.append(f"{key} in {path}: must be an absolute path")
+
+    scan_schedule = merged["PI_LINKS_SCAN_SCHEDULE"].strip()
+    if not scan_schedule or len(scan_schedule) > 100 or not scan_schedule.isprintable():
+        problems.append(
+            f"PI_LINKS_SCAN_SCHEDULE in {path}: must be a systemd calendar "
+            "expression such as weekly"
+        )
 
     if problems:
         raise ConfigError(problems)
-    return Settings(bind=bind, port=port, title=title, links_file=Path(links_file))
+    return Settings(
+        bind=bind,
+        port=port,
+        title=title,
+        links_file=Path(merged["PI_LINKS_LINKS_FILE"]),
+        discovery_file=Path(merged["PI_LINKS_DISCOVERY_FILE"]),
+        scan_schedule=scan_schedule,
+    )
+
+
+def _flag(entry: dict, label: str, problems: list[str]) -> bool:
+    value = entry.get("hide", False)
+    if not isinstance(value, bool):
+        problems.append(f"{label}: hide must be true or false")
+        return False
+    return value
 
 
 def _text(entry: dict, key: str, label: str, problems: list[str]) -> str:
@@ -168,15 +208,18 @@ def _parse_link(entry: object, label: str, problems: list[str]) -> Link | None:
         problems.append(f"{label}: unknown key {key}")
 
     name = _text(entry, "name", label, problems)
-    if not name:
-        problems.append(f"{label}: name is required")
     group = _text(entry, "group", label, problems) or DEFAULT_GROUP
     description = _text(entry, "description", label, problems)
+    hide = _flag(entry, label, problems)
 
     has_port = "port" in entry
     has_url = "url" in entry
     if has_port == has_url:
         problems.append(f"{label}: set exactly one of port or url")
+    if has_url and not name:
+        problems.append(f"{label}: name is required for a url link")
+    if has_url and "hide" in entry:
+        problems.append(f"{label}: hide only applies to port links; delete the entry instead")
 
     port = None
     path = "/"
@@ -224,6 +267,8 @@ def _parse_link(entry: object, label: str, problems: list[str]) -> Link | None:
         path=path,
         scheme=scheme,
         url=url,
+        hide=hide,
+        fields=frozenset(entry),
     )
 
 
@@ -236,12 +281,22 @@ def _parse_task(entry: object, label: str, problems: list[str]) -> Task | None:
     for key in sorted(set(entry) - TASK_KEYS):
         problems.append(f"{label}: unknown key {key}")
 
+    match = None
+    if "match" in entry:
+        match = _text(entry, "match", label, problems)
+        if not match:
+            problems.append(f"{label}: match must name a task id from the scan")
+    hide = _flag(entry, label, problems)
+    if "hide" in entry and "match" not in entry:
+        problems.append(f"{label}: hide only applies with match; delete the entry instead")
+
     name = _text(entry, "name", label, problems)
-    if not name:
-        problems.append(f"{label}: name is required")
     schedule = _text(entry, "schedule", label, problems)
-    if not schedule:
-        problems.append(f"{label}: schedule is required")
+    if "match" not in entry:
+        if not name:
+            problems.append(f"{label}: name is required")
+        if not schedule:
+            problems.append(f"{label}: schedule is required")
     description = _text(entry, "description", label, problems)
     group = _text(entry, "group", label, problems) or DEFAULT_TASK_GROUP
 
@@ -265,6 +320,9 @@ def _parse_task(entry: object, label: str, problems: list[str]) -> Task | None:
         group=group,
         status_file=status_file,
         status_max_age_hours=max_age,
+        match=match,
+        hide=hide,
+        fields=frozenset(entry),
     )
 
 

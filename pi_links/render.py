@@ -7,6 +7,8 @@ from html import escape
 from urllib.parse import urlsplit
 
 from .config import Link, Task
+from datetime import datetime
+
 from .status import format_time, read_status
 
 STYLE = """
@@ -22,10 +24,10 @@ STYLE = """
     sans-serif-condensed, sans-serif;
 }
 * { box-sizing: border-box; }
-html { background: var(--board); color: var(--silkscreen); font-family: var(--font); }
+html { background: var(--board); color: var(--silkscreen); font-family: var(--font); font-size: 81.25%; }
 body { margin: 0 auto; max-width: 76rem; padding: clamp(1.5rem, 5vw, 4rem) clamp(1rem, 4vw, 3rem); }
 header { margin-bottom: clamp(2.5rem, 6vw, 4.5rem); }
-h1 { font-size: clamp(2.75rem, 9vw, 5.5rem); font-weight: 700; line-height: 1; margin: 0; }
+h1 { font-size: clamp(2.5rem, 8vw, 4.5rem); font-weight: 700; line-height: 1; margin: 0; }
 header p { color: var(--muted); font-size: 1.125rem; margin: .5rem 0 0; }
 main {
   align-items: start;
@@ -75,9 +77,9 @@ a {
   height: 1.375rem;
   width: 1.375rem;
 }
-.name { display: block; font-size: 1.375rem; font-weight: 600; line-height: 1.15; overflow-wrap: anywhere; }
+.name { display: block; font-size: 1.25rem; font-weight: 600; line-height: 1.15; overflow-wrap: anywhere; }
 .description { color: var(--muted); display: block; font-size: 1rem; line-height: 1.3; margin-top: .125rem; }
-.target { color: var(--solder); font-size: 1.25rem; font-variant-numeric: tabular-nums; text-align: right; }
+.target { color: var(--solder); font-size: 1.125rem; font-variant-numeric: tabular-nums; text-align: right; }
 a:hover { background: var(--board-light); }
 a:hover .pad, a:focus-visible .pad { background: var(--solder); }
 a:focus-visible { outline: 3px solid var(--silkscreen); outline-offset: -3px; }
@@ -101,11 +103,11 @@ h3 { color: var(--solder); font-size: 1rem; font-weight: 600; margin: 0; padding
   padding: .375rem .75rem .375rem .9rem;
 }
 .tasks .name { font-size: 1.0625rem; }
-.tasks .description { font-size: .875rem; }
+.tasks .description { font-size: .9375rem; }
 .marker { border: 2px solid var(--silkscreen); height: .75rem; justify-self: center; width: .75rem; }
 .schedule { font-size: .9375rem; line-height: 1.2; max-width: 11rem; text-align: right; }
 @media (max-width: 30rem) { .schedule { max-width: 6.5rem; } }
-.status { display: block; font-size: .875rem; line-height: 1.3; margin-top: .125rem; }
+.status { display: block; font-size: .9375rem; line-height: 1.3; margin-top: .125rem; }
 .status-passed { color: var(--pass); }
 .status-attention { color: var(--warning); font-weight: 600; }
 .marker-passed { background: var(--pass); border-color: var(--pass); }
@@ -121,6 +123,7 @@ h3 { color: var(--solder); font-size: 1rem; font-weight: 600; margin: 0; padding
   padding: 1rem 1.25rem;
 }
 .notice ul { list-style: disc; margin-top: .5rem; overflow-wrap: anywhere; padding-left: 1.25rem; }
+footer { color: var(--muted); font-size: 1rem; line-height: 1.5; margin-top: 2.5rem; max-width: 70ch; }
 .empty { color: var(--muted); font-size: 1.25rem; line-height: 1.4; max-width: 60ch; }
 code { color: var(--silkscreen); font-family: inherit; font-weight: 600; overflow-wrap: anywhere; }
 """
@@ -192,6 +195,11 @@ def _render_task(task: Task) -> str:
     )
 
 
+def _group_order(name: str) -> tuple[bool, str]:
+    """Alphabetical, with the catch-all groups last."""
+    return (name in ("Services", "Other"), name.lower())
+
+
 def render_page(
     title: str,
     host: str,
@@ -199,6 +207,8 @@ def render_page(
     links_file: str,
     problems: list[str] | None = None,
     tasks: list[Task] | tuple[Task, ...] = (),
+    scanned_at: datetime | None = None,
+    scan_problem: str = "",
 ) -> str:
     groups: dict[str, list[Link]] = {}
     for link in links:
@@ -208,7 +218,7 @@ def render_page(
         f"<section><h2>{escape(group)}</h2><ul>"
         + "".join(_render_link(link, host) for link in members)
         + "</ul></section>"
-        for group, members in groups.items()
+        for group, members in sorted(groups.items(), key=lambda item: _group_order(item[0]))
     )
 
     if tasks:
@@ -221,7 +231,7 @@ def render_page(
                 f'<div class="task-group"><h3>{escape(group)}</h3><ul>'
                 + "".join(_render_task(task) for task in members)
                 + "</ul></div>"
-                for group, members in task_groups.items()
+                for group, members in sorted(task_groups.items(), key=lambda item: _group_order(item[0]))
             )
             + "</div></section>"
         )
@@ -234,13 +244,22 @@ def render_page(
             f"page shows the last working version. Fix these and reload:<ul>{items}</ul></div>"
         )
 
+    if scan_problem:
+        notice += f'<div class="notice" role="alert">{escape(scan_problem)}</div>'
+
     if sections:
         body = f"<main>{sections}</main>"
     else:
         body = (
-            '<p class="empty">No links yet. Add a service to '
+            '<p class="empty">No links yet. Run the scan, or add a service to '
             f"<code>{escape(links_file)}</code> and reload this page.</p>"
         )
+
+    scan_text = f"Last scan {format_time(scanned_at)}." if scanned_at else "Not scanned yet."
+    footer = (
+        f"<footer>{escape(scan_text)} To scan now, run "
+        "<code>sudo systemctl start pi-links-scan</code> on this machine.</footer>"
+    )
 
     return (
         '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
@@ -249,5 +268,5 @@ def render_page(
         '<link rel="icon" href="data:,">'
         f"<title>{escape(title)}</title><style>{STYLE}</style></head><body>"
         f"<header><h1>{escape(title)}</h1><p>{escape(host)}</p></header>"
-        f"{notice}{body}</body></html>"
+        f"{notice}{body}{footer}</body></html>"
     )

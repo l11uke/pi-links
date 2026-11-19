@@ -1,0 +1,14 @@
+[Unit]
+Description=pi-links scan for web services and scheduled tasks
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=@INSTALL_DIR@
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=@PYTHON@ -m pi_links --settings @CONFIG_DIR@/settings.env scan
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=full

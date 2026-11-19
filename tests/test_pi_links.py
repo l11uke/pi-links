@@ -101,7 +101,9 @@ def test_links_parse_with_defaults_and_order(tmp_path):
 @pytest.mark.parametrize(
     "body, expected",
     [
-        ('port = 80', "name is required"),
+        ('url = "https://example.com"', "name is required for a url link"),
+        ('name = "A"\nurl = "https://example.com"\nhide = true', "hide only applies to port links"),
+        ('port = 80\nhide = "yes"', "hide must be true or false"),
         ('name = "A"', "exactly one of port or url"),
         ('name = "A"\nport = 80\nurl = "https://example.com"', "exactly one of port or url"),
         ('name = "A"\nport = 0', "port must be"),
@@ -155,11 +157,13 @@ def test_page_escapes_every_value():
     assert "<script" not in page
 
 
-def test_groups_keep_first_seen_order():
-    links = [Link("A", group="Two", port=1), Link("B", group="One", port=2), Link("C", group="Two", port=3)]
+def test_groups_sort_alphabetically_with_catch_all_last():
+    links = [Link("A", group="Two", port=1), Link("B", group="One", port=2),
+             Link("C", group="Two", port=3), Link("D", port=4)]
     page = render_page("T", "h", links, "/f")
-    assert page.index(">Two<") < page.index(">One<")
-    assert page.count("<section>") == 2
+    assert page.index(">One<") < page.index(">Two<") < page.index(">Services<")
+    assert page.index(">A<") < page.index(">C<")
+    assert page.count("<section>") == 3
 
 
 def test_server_builds_links_from_host_header(running):
@@ -211,12 +215,13 @@ def test_tasks_parse_in_order(tmp_path):
     assert board.links == ()
 
 
-def test_tasks_render_under_project_headings_in_first_seen_order():
-    tasks = [Task("A", "Daily", group="Two"), Task("B", "Daily", group="One"), Task("C", "Daily", group="Two")]
+def test_tasks_render_under_sorted_project_headings():
+    tasks = [Task("A", "Daily", group="Two"), Task("B", "Daily", group="One"),
+             Task("C", "Daily", group="Two"), Task("D", "Daily")]
     page = render_page("T", "h", [], "/f", tasks=tasks)
-    assert page.count('class="task-group"') == 2
-    assert page.index("<h3>Two</h3>") < page.index("<h3>One</h3>")
-    assert page.index(">A<") < page.index(">C<") < page.index(">B<")
+    assert page.count('class="task-group"') == 3
+    assert page.index("<h3>One</h3>") < page.index("<h3>Two</h3>") < page.index("<h3>Other</h3>")
+    assert page.index(">B<") < page.index(">A<") < page.index(">C<")
 
 
 @pytest.mark.parametrize(
@@ -325,8 +330,10 @@ def test_links_example_is_empty_and_its_samples_are_valid(tmp_path):
     )
     board = load_board(write(tmp_path / "l.toml", sample))
     assert len(board.links) == 3
-    assert len(board.tasks) == 1
-    assert board.tasks[0].status_file
+    assert board.links[1].hide
+    assert len(board.tasks) == 2
+    assert board.tasks[0].match and board.tasks[0].status_file
+    assert board.tasks[1].match is None
 
 
 def test_no_site_values_in_tracked_text():
@@ -371,9 +378,10 @@ def run_script(name, env, stdin="", *args):
 
 def test_installer_writes_config_and_prefills_on_rerun(installer_env):
     tmp, env = installer_env
-    result = run_script("install.sh", env, "127.0.0.1\n5555\n8123\nLab board\n")
+    result = run_script("install.sh", env, "127.0.0.1\n5555\n8123\nLab board\nnot a schedule\nSun 03:40\n")
     assert result.returncode == 0, result.stderr
     assert "Port 5555 is in use" in result.stderr
+    assert "systemd does not understand" in result.stderr
 
     settings = tmp / "etc/settings.env"
     assert 'PI_LINKS_PORT="8123"' in settings.read_text()
@@ -382,28 +390,41 @@ def test_installer_writes_config_and_prefills_on_rerun(installer_env):
 
     unit = (tmp / "units/pi-links.service").read_text()
     assert "@" not in unit and f"WorkingDirectory={ROOT}" in unit
+    assert "OnCalendar=Sun 03:40" in (tmp / "units/pi-links-scan.timer").read_text()
+    assert "scan" in (tmp / "units/pi-links-scan.service").read_text()
+    log = (tmp / "log").read_text()
+    assert "enable --now pi-links-scan.timer" in log and "start pi-links-scan.service" in log
 
     links = tmp / "etc/links.toml"
     links.write_text('[[link]]\nname = "Keep"\nport = 1000\n')
-    result = run_script("install.sh", env, "\n\n\n")
+    result = run_script("install.sh", env, "\n\n\n\n")
     assert result.returncode == 0, result.stderr
     assert 'PI_LINKS_TITLE="Lab board"' in settings.read_text()
+    assert 'PI_LINKS_SCAN_SCHEDULE="Sun 03:40"' in settings.read_text()
     assert "Keep" in links.read_text()
 
 
 def test_installer_rejects_unsafe_title(installer_env):
     tmp, env = installer_env
-    result = run_script("install.sh", env, '0.0.0.0\n8123\nbad"$(x)\nGood\n')
+    result = run_script("install.sh", env, '0.0.0.0\n8123\nbad"$(x)\nGood\nweekly\n')
     assert result.returncode == 0, result.stderr
     assert 'PI_LINKS_TITLE="Good"' in (tmp / "etc/settings.env").read_text()
 
 
 def test_uninstaller_keeps_config_until_purge_and_repeats_safely(installer_env):
     tmp, env = installer_env
-    assert run_script("install.sh", env, "0.0.0.0\n8123\nBoard\n").returncode == 0
+    assert run_script("install.sh", env, "0.0.0.0\n8123\nBoard\nweekly\n").returncode == 0
+    settings = tmp / "etc/settings.env"
+    settings.write_text(settings.read_text().replace(
+        "/var/lib/pi-links/discovered.json", str(tmp / "state/discovered.json")))
+    (tmp / "state").mkdir()
+    (tmp / "state/discovered.json").write_text("{}")
     assert run_script("uninstall.sh", env).returncode == 0
     assert not (tmp / "units/pi-links.service").exists()
+    assert not (tmp / "units/pi-links-scan.timer").exists()
+    assert (tmp / "state/discovered.json").exists()
     assert (tmp / "etc/links.toml").exists()
     assert run_script("uninstall.sh", env, "", "--purge").returncode == 0
     assert not (tmp / "etc").exists()
+    assert not (tmp / "state").exists()
     assert run_script("uninstall.sh", env, "", "--purge").returncode == 0

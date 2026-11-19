@@ -1,29 +1,31 @@
-# pi-links: one [[link]] block per service. Save the file and reload the page;
-# no restart is needed. Groups and links appear in the order written here.
+# pi-links: changes to what the scan finds, plus anything it cannot find.
 #
-# name         required
-# group        optional heading, default "Services"
-# description  optional short line under the name
+# The scan finds web services and scheduled tasks on its own, and the page shows
+# them with no entries here. Save this file and reload the page; no restart is
+# needed. To see what the scan found, with the port or id to match, run:
+#   cd /opt/pi-links && sudo python3 -m pi_links scan
 #
-# For a service on this Pi, set port. The page builds the address from the
-# host name or IP you used to open it.
-# port         required, 1 to 65535
-# path         optional, default "/"
-# scheme       optional, "http" or "https", default "http"
+# Links
+# A [[link]] with port changes the service the scan found on that port, or adds
+# one the scan missed. A [[link]] with url adds any other address.
+# port         1 to 65535
+# url          full http or https address, instead of port
+# name         required for url links
+# group        heading, default "Services"
+# description  short line under the name
+# path         port links only, default "/"
+# scheme       port links only, "http" or "https"
+# hide         port links only, true to leave it off the page
 #
-# For anything else, set url instead of port.
-# url          full http or https address
-#
-# For a scheduled job with no web page, add a [[task]] block. Tasks are listed
-# under "Scheduled tasks" and are not clickable. You write the schedule text.
-# name         required
-# group        optional project heading, default "Other"
-# schedule     required, for example "Mondays 8am"
-# description  optional short line under the name
-# status_file  optional absolute path to a result file the job writes after
-#              each run; the page shows when it last passed
-# status_max_age_hours  optional, default 192 (8 days); an older pass shows
-#              as overdue
+# Scheduled tasks
+# A [[task]] with match changes the task the scan found with that id. Without
+# match it adds a task the scan cannot see, and then needs name and schedule.
+# match        the task id the scan printed
+# hide         true to leave it off the page (needs match)
+# name, group, schedule, description
+# status_file  absolute path to a result file the job writes after each run;
+#              the page shows when it last passed
+# status_max_age_hours  default 192 (8 days); an older pass shows as overdue
 #
 # Result file format (JSON):
 #   {"checked_at": "2026-01-04T18:00:00+10:00", "ok": true, "summary": "3 of 3 OK"}
@@ -31,16 +33,13 @@
 # Remove the leading "# " from these examples and change them to suit.
 
 # [[link]]
-# name = "Grafana"
-# group = "Monitoring"
-# description = "Dashboards"
 # port = 3000
+# name = "Dashboards"
+# group = "Monitoring"
 
 # [[link]]
-# name = "Media server"
-# group = "Media"
-# port = 8096
-# path = "/web"
+# port = 8081
+# hide = true
 
 # [[link]]
 # name = "Project source"
@@ -48,8 +47,13 @@
 # url = "https://example.com/my-project"
 
 # [[task]]
-# name = "Weekly report"
-# group = "Network monitor"
-# schedule = "Mondays 8am"
-# description = "Emails a summary"
-# status_file = "/var/lib/my-report/status.json"
+# match = "backup.timer"
+# name = "Nightly backup"
+# group = "Backups"
+# status_file = "/var/lib/my-backup/status.json"
+
+# [[task]]
+# name = "Router reboot"
+# group = "Network"
+# schedule = "Sundays 4am"
+# description = "Runs on the router, not this machine"

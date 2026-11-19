@@ -8,6 +8,8 @@ UNIT_DIR="${PI_LINKS_UNIT_DIR:-/etc/systemd/system}"
 SETTINGS_FILE="$CONFIG_DIR/settings.env"
 LINKS_FILE="$CONFIG_DIR/links.toml"
 UNIT_FILE="$UNIT_DIR/pi-links.service"
+SCAN_SERVICE_FILE="$UNIT_DIR/pi-links-scan.service"
+SCAN_TIMER_FILE="$UNIT_DIR/pi-links-scan.timer"
 
 die() {
     echo "Error: $*" >&2
@@ -44,7 +46,7 @@ port_available() {
 
 [[ "$(id -u)" -eq 0 ]] || die "run this with sudo"
 [[ "$(uname -s)" == "Linux" ]] || die "pi-links needs Linux"
-for tool in python3 systemctl ss sed; do
+for tool in python3 systemctl systemd-analyze ss sed; do
     command -v "$tool" >/dev/null || die "$tool is required"
 done
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' \
@@ -79,6 +81,18 @@ while true; do
     fi
 done
 
+while true; do
+    schedule="$(ask "When to scan for new services and tasks (systemd calendar, e.g. weekly or Sun 03:40)" "$(existing PI_LINKS_SCAN_SCHEDULE weekly)")"
+    if [[ ! "$schedule" =~ ^[A-Za-z0-9\ \*:,./~-]{1,100}$ ]]; then
+        echo "Use letters, numbers, spaces and * : , . / ~ - only." >&2
+    elif ! systemd-analyze calendar "$schedule" >/dev/null 2>&1; then
+        echo "systemd does not understand \"$schedule\". Try weekly, daily or Sun 03:40." >&2
+    else
+        break
+    fi
+done
+discovery_file="$(existing PI_LINKS_DISCOVERY_FILE /var/lib/pi-links/discovered.json)"
+
 install -d -m 755 "$CONFIG_DIR" "$UNIT_DIR"
 
 settings_tmp="$(mktemp "$CONFIG_DIR/.settings.XXXXXX")"
@@ -88,6 +102,8 @@ PI_LINKS_BIND="$bind"
 PI_LINKS_PORT="$port"
 PI_LINKS_TITLE="$title"
 PI_LINKS_LINKS_FILE="$LINKS_FILE"
+PI_LINKS_DISCOVERY_FILE="$discovery_file"
+PI_LINKS_SCAN_SCHEDULE="$schedule"
 EOF
 chmod 644 "$settings_tmp"
 mv "$settings_tmp" "$SETTINGS_FILE"
@@ -103,15 +119,26 @@ fi
 (cd "$INSTALL_DIR" && python3 -B -m pi_links --settings "$SETTINGS_FILE" check-config >/dev/null)
 
 python_path="$(command -v python3)"
-sed -e "s|@INSTALL_DIR@|$INSTALL_DIR|g" \
-    -e "s|@CONFIG_DIR@|$CONFIG_DIR|g" \
-    -e "s|@PYTHON@|$python_path|g" \
-    "$INSTALL_DIR/systemd/pi-links.service.template" >"$UNIT_FILE"
-chmod 644 "$UNIT_FILE"
+render() {
+    sed -e "s|@INSTALL_DIR@|$INSTALL_DIR|g" \
+        -e "s|@CONFIG_DIR@|$CONFIG_DIR|g" \
+        -e "s|@PYTHON@|$python_path|g" \
+        -e "s|@SCAN_SCHEDULE@|$schedule|g" \
+        "$INSTALL_DIR/systemd/$1.template" >"$2"
+    chmod 644 "$2"
+}
+render pi-links.service "$UNIT_FILE"
+render pi-links-scan.service "$SCAN_SERVICE_FILE"
+render pi-links-scan.timer "$SCAN_TIMER_FILE"
 
 systemctl daemon-reload
 systemctl enable pi-links.service >/dev/null
 systemctl restart pi-links.service
+systemctl enable --now pi-links-scan.timer >/dev/null
+echo "Scanning this machine. This takes up to a minute."
+if ! systemctl start pi-links-scan.service; then
+    echo "Warning: the first scan failed. Run: journalctl -u pi-links-scan -n 30" >&2
+fi
 
 if [[ "${PI_LINKS_SKIP_HEALTHCHECK:-}" != "1" ]]; then
     case "$bind" in
@@ -132,5 +159,5 @@ if [[ "${PI_LINKS_SKIP_HEALTHCHECK:-}" != "1" ]]; then
     [[ "$healthy" == "yes" ]] || die "service did not respond. Run: journalctl -u pi-links -n 30"
 fi
 
-echo "pi-links is running on port $port."
-echo "Edit your links in $LINKS_FILE, then reload the page."
+echo "pi-links is running on port $port. The scan runs: $schedule."
+echo "To rename, regroup or hide what it finds, edit $LINKS_FILE and reload the page."

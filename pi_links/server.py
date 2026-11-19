@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from .config import Board, ConfigError, Settings, load_board
+from .discovery import Discovery, Merged, load_discovery, merge
 from .render import render_page
 
 _HOSTNAME = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$")
@@ -50,33 +51,49 @@ def host_from_header(header: str | None, fallback: str) -> str:
 
 
 class LinkStore:
-    """Reloads the links file when it changes and keeps the last good copy."""
+    """Reloads the links file and scan result when either changes.
 
-    def __init__(self, path: Path):
+    An invalid links file leaves the last good copy in place.
+    """
+
+    def __init__(self, path: Path, discovery_path: Path | None = None):
         self.path = path
+        self.discovery_path = discovery_path
         self._lock = threading.Lock()
         self._board = load_board(path)
         self._problems: list[str] = []
-        self._stamp = self._current_stamp()
+        self._discovery = self._load_discovery()
+        self._stamps = self._current_stamps()
 
-    def _current_stamp(self) -> tuple[int, int] | None:
+    def _load_discovery(self) -> Discovery:
+        return load_discovery(self.discovery_path) if self.discovery_path else Discovery()
+
+    @staticmethod
+    def _stamp(path: Path | None) -> tuple[int, int] | None:
+        if path is None:
+            return None
         try:
-            stat = self.path.stat()
+            stat = path.stat()
         except OSError:
             return None
         return (stat.st_mtime_ns, stat.st_size)
 
-    def get(self) -> tuple[Board, list[str]]:
+    def _current_stamps(self):
+        return (self._stamp(self.path), self._stamp(self.discovery_path))
+
+    def get(self) -> tuple[Merged, list[str], Discovery]:
         with self._lock:
-            stamp = self._current_stamp()
-            if stamp != self._stamp:
-                self._stamp = stamp
+            stamps = self._current_stamps()
+            if stamps[0] != self._stamps[0]:
                 try:
                     self._board = load_board(self.path)
                     self._problems = []
                 except ConfigError as exc:
                     self._problems = exc.problems
-            return self._board, list(self._problems)
+            if stamps[1] != self._stamps[1]:
+                self._discovery = self._load_discovery()
+            self._stamps = stamps
+            return merge(self._board, self._discovery), list(self._problems), self._discovery
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -105,14 +122,16 @@ class Handler(BaseHTTPRequestHandler):
 
         local_ip = self.connection.getsockname()[0]
         host = host_from_header(self.headers.get("Host"), _format_ip(local_ip) or local_ip)
-        board, problems = self.server.store.get()
+        merged, problems, discovery = self.server.store.get()
         page = render_page(
             self.server.settings.title,
             host,
-            list(board.links),
+            list(merged.links),
             str(self.server.store.path),
             problems,
-            board.tasks,
+            merged.tasks,
+            scanned_at=discovery.scanned_at,
+            scan_problem=discovery.problem,
         )
         self._send(200, "text/html; charset=utf-8", page.encode("utf-8"))
 
