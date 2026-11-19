@@ -1,0 +1,34 @@
+# pi-links: one [[link]] block per service. Save the file and reload the page;
+# no restart is needed. Groups and links appear in the order written here.
+#
+# name         required
+# group        optional heading, default "Services"
+# description  optional short line under the name
+#
+# For a service on this Pi, set port. The page builds the address from the
+# host name or IP you used to open it.
+# port         required, 1 to 65535
+# path         optional, default "/"
+# scheme       optional, "http" or "https", default "http"
+#
+# For anything else, set url instead of port.
+# url          full http or https address
+#
+# Remove the leading "# " from these examples and change them to suit.
+
+# [[link]]
+# name = "Grafana"
+# group = "Monitoring"
+# description = "Dashboards"
+# port = 3000
+
+# [[link]]
+# name = "Media server"
+# group = "Media"
+# port = 8096
+# path = "/web"
+
+# [[link]]
+# name = "Project source"
+# group = "Reference"
+# url = "https://example.com/my-project"
